@@ -5,75 +5,100 @@ import jsQR from 'jsqr';
 const initialFormState = { title: '', date: '', points: 0, is_mandatory: false, organizer: '' };
 
 function AdminDashboard() {
-  // --- STATE UNTUK MANAJEMEN ACARA ---
+  // --- STATE UNTUK SEMUA FITUR ---
   const [events, setEvents] = useState([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [currentEvent, setCurrentEvent] = useState(initialFormState);
   const [isEditing, setIsEditing] = useState(false);
-
-  // --- STATE UNTUK SCANNER QR ---
   const [isScanning, setIsScanning] = useState(false);
-  const [scanResultMessage, setScanResultMessage] = useState({ type: '', text: '' });
+  const [message, setMessage] = useState({ type: '', text: '' }); // Satu state untuk semua pesan
+
+  // --- REFS UNTUK SCANNER ---
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const requestRef = useRef(null);
 
-  // --- FUNGSI MANAJEMEN ACARA ---
+  // --- FUNGSI-FUNGSI ---
 
+  // Mengambil daftar acara
   const fetchEvents = async () => {
-    const response = await fetch('/api/events');
-    const data = await response.json();
-    setEvents(data);
+    try {
+      const response = await fetch('/api/events');
+      const data = await response.json();
+      setEvents(data);
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Failed to fetch events.' });
+    }
   };
 
   useEffect(() => {
     fetchEvents();
   }, []);
 
+  // Handler untuk form acara
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     setCurrentEvent({ ...currentEvent, [name]: type === 'checkbox' ? checked : value });
   };
 
+  // Handler untuk klik tombol
   const handleEditClick = (event) => {
     const formattedEvent = { ...event, date: new Date(event.date).toISOString().split('T')[0] };
     setCurrentEvent(formattedEvent);
     setIsEditing(true);
     setIsFormOpen(true);
+    setMessage({ type: '', text: '' });
   };
 
   const handleAddClick = () => {
     setCurrentEvent(initialFormState);
     setIsEditing(false);
     setIsFormOpen(true);
+    setMessage({ type: '', text: '' });
   };
 
+  // Handler untuk submit form (Create/Update)
   const handleSubmit = async (e) => {
     e.preventDefault();
     const url = isEditing ? `/api/events/${currentEvent.event_id}` : '/api/events';
     const method = isEditing ? 'PUT' : 'POST';
-    await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(currentEvent),
-    });
+    await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(currentEvent) });
     setIsFormOpen(false);
     fetchEvents();
   };
-
+  
+  // Handler untuk hapus acara
   const handleDeleteClick = async (eventId) => {
-    if (window.confirm('Are you sure?')) {
+    if (window.confirm('Are you sure you want to delete this event?')) {
       const response = await fetch(`/api/events/${eventId}`, { method: 'DELETE' });
+      const data = await response.json();
       if (!response.ok) {
-        const data = await response.json();
-        alert(data.message);
+        setMessage({ type: 'error', text: data.message });
+      } else {
+        setMessage({ type: 'success', text: data.message });
       }
       fetchEvents();
     }
   };
 
-  // --- FUNGSI SCANNER QR ---
+  // FIX: Menambahkan kembali fungsi generate sertifikat
+  const handleGenerateCerts = async (eventId) => {
+    setMessage({ type: 'info', text: `Generating certificates for event ${eventId}... Please wait.` });
+    try {
+      const response = await fetch('/api/generate-certificates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+      setMessage({ type: 'success', text: data.message });
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    }
+  };
 
+  // --- LOGIKA SCANNER QR ---
   const startScanner = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -81,11 +106,11 @@ function AdminDashboard() {
         videoRef.current.srcObject = stream;
         videoRef.current.play();
         setIsScanning(true);
-        setScanResultMessage({ type: '', text: '' });
+        setMessage({ type: '', text: '' });
         requestRef.current = requestAnimationFrame(tick);
       }
     } catch (err) {
-      setScanResultMessage({ type: 'error', text: 'Camera access denied.' });
+      setMessage({ type: 'error', text: 'Camera access denied.' });
     }
   };
 
@@ -108,7 +133,7 @@ function AdminDashboard() {
       if (code) handleScanResult(code.data);
       else requestRef.current = requestAnimationFrame(tick);
     } else {
-      requestRef.current = requestAnimationFrame(tick);
+      if(isScanning) requestRef.current = requestAnimationFrame(tick);
     }
   };
 
@@ -122,21 +147,34 @@ function AdminDashboard() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message);
-      setScanResultMessage({ type: 'success', text: data.message });
+      setMessage({ type: 'success', text: data.message });
     } catch (err) {
-      setScanResultMessage({ type: 'error', text: err.message });
+      setMessage({ type: 'error', text: err.message });
     }
   };
 
   useEffect(() => {
-    return () => stopScanner(); // Cleanup camera on component unmount
+    return () => stopScanner(); // Cleanup camera
   }, []);
+
 
   return (
     <div className="dashboard-container">
       <h2>Admin Dashboard</h2>
       
-      {/* --- BAGIAN SCANNER QR --- */}
+      {/* Tampilkan pesan feedback di atas */}
+      {message.text && (
+        <p style={{ 
+          padding: '10px', 
+          borderRadius: '5px',
+          color: 'white',
+          backgroundColor: message.type === 'error' ? '#d9534f' : (message.type === 'success' ? '#5cb85c' : '#5bc0de') 
+        }}>
+          <strong>{message.text}</strong>
+        </p>
+      )}
+
+      {/* Bagian Scanner QR */}
       <div className="form-container" style={{ marginBottom: '2rem' }}>
         <h3>QR Code Check-in</h3>
         {!isScanning ? (
@@ -150,14 +188,9 @@ function AdminDashboard() {
             <canvas ref={canvasRef} style={{ display: 'none' }} />
           </div>
         )}
-        {scanResultMessage.text && (
-          <p style={{ color: scanResultMessage.type === 'error' ? 'red' : 'green', marginTop: '1rem' }}>
-            <strong>{scanResultMessage.text}</strong>
-          </p>
-        )}
       </div>
 
-      {/* --- BAGIAN MANAJEMEN ACARA --- */}
+      {/* Bagian Manajemen Acara */}
       <div className="event-management-section">
         <h3>Event Management</h3>
         <button className="btn" onClick={handleAddClick} style={{ marginBottom: '1rem' }}>
@@ -168,16 +201,12 @@ function AdminDashboard() {
           <div className="form-container" style={{ marginBottom: '2rem' }}>
             <h4>{isEditing ? 'Edit Event' : 'Add New Event'}</h4>
             <form onSubmit={handleSubmit}>
-              {/* Form inputs... */}
               <input name="title" value={currentEvent.title} onChange={handleInputChange} placeholder="Event Title" required />
               <input name="organizer" value={currentEvent.organizer} onChange={handleInputChange} placeholder="Organizer" required />
               <input name="points" type="number" value={currentEvent.points} onChange={handleInputChange} placeholder="Points" />
               <input name="date" type="date" value={currentEvent.date} onChange={handleInputChange} required />
-              <label>
-                <input name="is_mandatory" type="checkbox" checked={currentEvent.is_mandatory} onChange={handleInputChange} />
-                Is Mandatory
-              </label>
-              <button type="submit" className="btn">Save Event</button>
+              <label><input name="is_mandatory" type="checkbox" checked={currentEvent.is_mandatory} onChange={handleInputChange} /> Is Mandatory</label>
+              <button type="submit" className="btn">Save</button>
               <button type="button" className="btn" onClick={() => setIsFormOpen(false)} style={{ marginLeft: '0.5rem', backgroundColor: '#6c757d' }}>Cancel</button>
             </form>
           </div>
@@ -196,9 +225,11 @@ function AdminDashboard() {
               <tr key={event.event_id}>
                 <td>{event.title}</td>
                 <td>{new Date(event.date).toLocaleDateString()}</td>
-                <td>
-                  <button onClick={() => handleEditClick(event)} style={{ marginRight: '5px' }}>Edit</button>
+                <td style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                  <button onClick={() => handleEditClick(event)}>Edit</button>
                   <button onClick={() => handleDeleteClick(event.event_id)}>Delete</button>
+                  {/* FIX: Menambahkan kembali tombol Generate Certificates */}
+                  <button onClick={() => handleGenerateCerts(event.event_id)}>Certificates</button>
                 </td>
               </tr>
             ))}
