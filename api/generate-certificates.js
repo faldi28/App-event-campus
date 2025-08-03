@@ -52,7 +52,7 @@ export default async function handler(req, res) {
       page.drawText(`has attended the event: ${attendee.title}`, { x: 50, y: 320, font, size: 20 });
 
       // 3. Buat QR Code Verifikasi
-      const verificationUrl = `http://localhost:5173/verify/${certificateId}`; // Ganti dengan URL produksi Anda nanti
+      const verificationUrl = `https://app-event-campus.vercel.app/verify/${certificateId}`; // Ganti dengan URL produksi Anda nanti
       const qrImage = await QRCode.toDataURL(verificationUrl);
       const qrImageBytes = await fetch(qrImage).then(res => res.arrayBuffer());
       const embeddedQrImage = await pdfDoc.embedPng(qrImageBytes);
