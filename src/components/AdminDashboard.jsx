@@ -152,21 +152,33 @@ function AdminDashboard() {
     }
   };
 
-  const handleScanResult = async (qrCodeData) => {
-    stopScanner();
-    try {
-      const response = await fetch('/api/checkin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ qrCodeData }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message);
-      setMessage({ type: 'success', text: data.message });
-    } catch (err) {
-      setMessage({ type: 'error', text: err.message });
+  // Ganti fungsi handleScanResult yang lama dengan yang ini
+const handleScanResult = async (qrCodeData) => {
+  stopScanner();
+  console.log('1. QR Code terdeteksi:', qrCodeData); // DEBUG
+
+  try {
+    console.log('2. Mengirim data ke API /api/checkin...'); // DEBUG
+    const response = await fetch('/api/checkin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ qrCodeData }),
+    });
+
+    console.log('3. Mendapat respons dari API. Status OK:', response.ok); // DEBUG
+
+    const data = await response.json();
+    console.log('4. Data respons dari API:', data); // DEBUG
+
+    if (!response.ok) {
+      throw new Error(data.message);
     }
-  };
+    setMessage({ type: 'success', text: data.message });
+  } catch (err) {
+    console.error('5. Terjadi error:', err); // DEBUG
+    setMessage({ type: 'error', text: err.message });
+  }
+};
 
   useEffect(() => {
     return () => stopScanner(); // Cleanup camera saat komponen di-unmount
