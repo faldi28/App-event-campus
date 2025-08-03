@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import jsQR from 'jsqr';
 
-// State awal untuk form acara
+// State awal untuk form acara, diletakkan di luar agar mudah di-reset
 const initialFormState = { title: '', date: '', points: 0, is_mandatory: false, organizer: '' };
 
 function AdminDashboard() {
@@ -11,7 +11,7 @@ function AdminDashboard() {
   const [currentEvent, setCurrentEvent] = useState(initialFormState);
   const [isEditing, setIsEditing] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' }); // Satu state untuk semua pesan
+  const [message, setMessage] = useState({ type: '', text: '' }); // Satu state untuk semua pesan feedback
 
   // --- REFS UNTUK SCANNER ---
   const videoRef = useRef(null);
@@ -20,7 +20,7 @@ function AdminDashboard() {
 
   // --- FUNGSI-FUNGSI ---
 
-  // Mengambil daftar acara
+  // Mengambil daftar acara dari API
   const fetchEvents = async () => {
     try {
       const response = await fetch('/api/events');
@@ -31,17 +31,18 @@ function AdminDashboard() {
     }
   };
 
+  // Jalankan fetchEvents saat komponen pertama kali dimuat
   useEffect(() => {
     fetchEvents();
   }, []);
 
-  // Handler untuk form acara
+  // Handler untuk setiap perubahan pada input form
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     setCurrentEvent({ ...currentEvent, [name]: type === 'checkbox' ? checked : value });
   };
 
-  // Handler untuk klik tombol
+  // Handler untuk klik tombol edit
   const handleEditClick = (event) => {
     const formattedEvent = { ...event, date: new Date(event.date).toISOString().split('T')[0] };
     setCurrentEvent(formattedEvent);
@@ -50,6 +51,7 @@ function AdminDashboard() {
     setMessage({ type: '', text: '' });
   };
 
+  // Handler untuk klik tombol tambah baru
   const handleAddClick = () => {
     setCurrentEvent(initialFormState);
     setIsEditing(false);
@@ -57,31 +59,44 @@ function AdminDashboard() {
     setMessage({ type: '', text: '' });
   };
 
-  // Handler untuk submit form (Create/Update)
+  // Handler untuk submit form (bisa untuk create atau update)
   const handleSubmit = async (e) => {
     e.preventDefault();
     const url = isEditing ? `/api/events/${currentEvent.event_id}` : '/api/events';
     const method = isEditing ? 'PUT' : 'POST';
-    await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(currentEvent) });
-    setIsFormOpen(false);
-    fetchEvents();
+    
+    try {
+      const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(currentEvent) });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'An error occurred.');
+      }
+      setMessage({ type: 'success', text: `Event ${isEditing ? 'updated' : 'created'} successfully!` });
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    } finally {
+      setIsFormOpen(false);
+      fetchEvents(); // Muat ulang daftar acara
+    }
   };
   
   // Handler untuk hapus acara
   const handleDeleteClick = async (eventId) => {
     if (window.confirm('Are you sure you want to delete this event?')) {
-      const response = await fetch(`/api/events/${eventId}`, { method: 'DELETE' });
-      const data = await response.json();
-      if (!response.ok) {
-        setMessage({ type: 'error', text: data.message });
-      } else {
+      try {
+        const response = await fetch(`/api/events/${eventId}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message);
         setMessage({ type: 'success', text: data.message });
+      } catch (err) {
+        setMessage({ type: 'error', text: err.message });
+      } finally {
+        fetchEvents(); // Muat ulang daftar acara
       }
-      fetchEvents();
     }
   };
-
-  // FIX: Menambahkan kembali fungsi generate sertifikat
+  
+  // Handler untuk generate sertifikat
   const handleGenerateCerts = async (eventId) => {
     setMessage({ type: 'info', text: `Generating certificates for event ${eventId}... Please wait.` });
     try {
@@ -131,7 +146,7 @@ function AdminDashboard() {
       const imageData = canvas.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
       const code = jsQR(imageData.data, imageData.width, imageData.height);
       if (code) handleScanResult(code.data);
-      else requestRef.current = requestAnimationFrame(tick);
+      else if(isScanning) requestRef.current = requestAnimationFrame(tick);
     } else {
       if(isScanning) requestRef.current = requestAnimationFrame(tick);
     }
@@ -154,20 +169,20 @@ function AdminDashboard() {
   };
 
   useEffect(() => {
-    return () => stopScanner(); // Cleanup camera
+    return () => stopScanner(); // Cleanup camera saat komponen di-unmount
   }, []);
-
 
   return (
     <div className="dashboard-container">
       <h2>Admin Dashboard</h2>
       
-      {/* Tampilkan pesan feedback di atas */}
+      {/* Area untuk menampilkan pesan feedback */}
       {message.text && (
         <p style={{ 
           padding: '10px', 
           borderRadius: '5px',
           color: 'white',
+          textAlign: 'center',
           backgroundColor: message.type === 'error' ? '#d9534f' : (message.type === 'success' ? '#5cb85c' : '#5bc0de') 
         }}>
           <strong>{message.text}</strong>
@@ -175,7 +190,7 @@ function AdminDashboard() {
       )}
 
       {/* Bagian Scanner QR */}
-      <div className="form-container" style={{ marginBottom: '2rem' }}>
+      <div className="form-container" style={{ padding: '1.5rem', border: '1px solid #eee', borderRadius: '8px', marginBottom: '2rem' }}>
         <h3>QR Code Check-in</h3>
         {!isScanning ? (
           <button className="btn" onClick={startScanner}>Start Scanner</button>
@@ -184,7 +199,7 @@ function AdminDashboard() {
         )}
         {isScanning && (
           <div style={{ marginTop: '20px' }}>
-            <video ref={videoRef} style={{ width: '100%', maxWidth: '400px' }} />
+            <video ref={videoRef} style={{ width: '100%', maxWidth: '400px', border: '1px solid #ddd' }} />
             <canvas ref={canvasRef} style={{ display: 'none' }} />
           </div>
         )}
@@ -193,9 +208,11 @@ function AdminDashboard() {
       {/* Bagian Manajemen Acara */}
       <div className="event-management-section">
         <h3>Event Management</h3>
-        <button className="btn" onClick={handleAddClick} style={{ marginBottom: '1rem' }}>
-          Add New Event
-        </button>
+        {!isFormOpen && (
+          <button className="btn" onClick={handleAddClick} style={{ marginBottom: '1rem' }}>
+            Add New Event
+          </button>
+        )}
 
         {isFormOpen && (
           <div className="form-container" style={{ marginBottom: '2rem' }}>
@@ -228,7 +245,6 @@ function AdminDashboard() {
                 <td style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
                   <button onClick={() => handleEditClick(event)}>Edit</button>
                   <button onClick={() => handleDeleteClick(event.event_id)}>Delete</button>
-                  {/* FIX: Menambahkan kembali tombol Generate Certificates */}
                   <button onClick={() => handleGenerateCerts(event.event_id)}>Certificates</button>
                 </td>
               </tr>
