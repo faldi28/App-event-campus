@@ -6,12 +6,18 @@ function StudentDashboard() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      // --- CATATAN PENTING ---
-      // Di aplikasi nyata, email ini akan didapat dari sesi login.
-      // Untuk proyek ini, kita hardcode satu email untuk simulasi.
-      const userEmail = 'budi@example.com'; // Ganti dengan email yang sudah Anda daftarkan ke acara
+    // Mengambil data pengguna dari localStorage yang diset saat login
+    const user = JSON.parse(localStorage.getItem('user'));
+    const userEmail = user?.email;
 
+    // Jika tidak ada email (belum login), tampilkan pesan error
+    if (!userEmail) {
+      setError('User not logged in. Please login first.');
+      setLoading(false);
+      return;
+    }
+
+    const fetchDashboardData = async () => {
       try {
         const response = await fetch(`/api/dashboard?email=${userEmail}`);
         const data = await response.json();
@@ -19,7 +25,6 @@ function StudentDashboard() {
         if (!response.ok) {
           throw new Error(data.message || 'Failed to fetch data');
         }
-
         setDashboardData(data);
       } catch (err) {
         setError(err.message);
@@ -36,7 +41,7 @@ function StudentDashboard() {
   }
 
   if (error) {
-    return <div style={{ color: 'red' }}>Error: {error}</div>;
+    return <div className="dashboard-container" style={{ color: 'red' }}>Error: {error}</div>;
   }
 
   if (!dashboardData) {
