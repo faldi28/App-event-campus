@@ -22,7 +22,6 @@ export default async function handler(request, response) {
       if (result.rowCount === 0) return response.status(404).json({ message: 'Event not found' });
       return response.status(200).json(result.rows[0]);
     } catch (error) {
-      console.error('Error updating event:', error);
       return response.status(500).json({ message: 'Internal Server Error' });
     }
   }
@@ -35,7 +34,6 @@ export default async function handler(request, response) {
       }
       return response.status(200).json({ message: 'Event deleted successfully' });
     } catch (error) {
-      console.error('Error deleting event:', error);
       if (error.code === '23503') {
         return response.status(409).json({ message: 'Cannot delete event because it has registrations.' });
       }
