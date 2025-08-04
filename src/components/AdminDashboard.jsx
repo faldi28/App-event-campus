@@ -1,26 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import jsQR from 'jsqr';
 
-// State awal untuk form acara, diletakkan di luar agar mudah di-reset
 const initialFormState = { title: '', date: '', points: 0, is_mandatory: false, organizer: '' };
 
 function AdminDashboard() {
-  // --- STATE UNTUK SEMUA FITUR ---
   const [events, setEvents] = useState([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [currentEvent, setCurrentEvent] = useState(initialFormState);
   const [isEditing, setIsEditing] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' }); // Satu state untuk semua pesan feedback
+  const [message, setMessage] = useState({ type: '', text: '' });
 
-  // --- REFS UNTUK SCANNER ---
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const requestRef = useRef(null);
 
-  // --- FUNGSI-FUNGSI ---
-
-  // Mengambil daftar acara dari API
   const fetchEvents = async () => {
     try {
       const response = await fetch('/api/events');
@@ -35,13 +29,11 @@ function AdminDashboard() {
     fetchEvents();
   }, []);
 
-  // Handler untuk setiap perubahan pada input form
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     setCurrentEvent({ ...currentEvent, [name]: type === 'checkbox' ? checked : value });
   };
 
-  // Handler untuk klik tombol edit
   const handleEditClick = (event) => {
     const formattedEvent = { ...event, date: new Date(event.date).toISOString().split('T')[0] };
     setCurrentEvent(formattedEvent);
@@ -50,7 +42,6 @@ function AdminDashboard() {
     setMessage({ type: '', text: '' });
   };
 
-  // Handler untuk klik tombol tambah baru
   const handleAddClick = () => {
     setCurrentEvent(initialFormState);
     setIsEditing(false);
@@ -58,12 +49,10 @@ function AdminDashboard() {
     setMessage({ type: '', text: '' });
   };
 
-  // Handler untuk submit form (bisa untuk create atau update)
   const handleSubmit = async (e) => {
     e.preventDefault();
     const url = isEditing ? `/api/events/${currentEvent.event_id}` : '/api/events';
     const method = isEditing ? 'PUT' : 'POST';
-    
     try {
       const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(currentEvent) });
       if (!response.ok) {
@@ -75,11 +64,10 @@ function AdminDashboard() {
       setMessage({ type: 'error', text: err.message });
     } finally {
       setIsFormOpen(false);
-      fetchEvents(); // Muat ulang daftar acara
+      fetchEvents();
     }
   };
   
-  // Handler untuk hapus acara
   const handleDeleteClick = async (eventId) => {
     if (window.confirm('Are you sure you want to delete this event?')) {
       try {
@@ -90,12 +78,11 @@ function AdminDashboard() {
       } catch (err) {
         setMessage({ type: 'error', text: err.message });
       } finally {
-        fetchEvents(); // Muat ulang daftar acara
+        fetchEvents();
       }
     }
   };
   
-  // Handler untuk generate sertifikat
   const handleGenerateCerts = async (eventId) => {
     setMessage({ type: 'info', text: `Generating certificates for event ${eventId}... Please wait.` });
     try {
@@ -112,11 +99,7 @@ function AdminDashboard() {
     }
   };
 
-  // --- LOGIKA SCANNER QR (VERSI PERBAIKAN) ---
-
-  // Fungsi yang berjalan di setiap frame video untuk mencari QR code
   const tick = () => {
-    // FIX: Tambahkan pengecekan `isScanning` untuk memastikan loop berhenti jika user menekan "Stop"
     if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA && isScanning) {
       const canvas = canvasRef.current.getContext('2d');
       canvasRef.current.height = videoRef.current.videoHeight;
@@ -126,15 +109,12 @@ function AdminDashboard() {
       const code = jsQR(imageData.data, imageData.width, imageData.height);
       
       if (code) {
-        // Jika kode ditemukan, hentikan pemindaian dan proses hasilnya
         stopScanner();
         handleScanResult(code.data);
       } else {
-        // Jika tidak ada kode, lanjutkan ke frame berikutnya
         requestRef.current = requestAnimationFrame(tick);
       }
     } else {
-      // Jika video belum siap, tetap lanjutkan loop
       requestRef.current = requestAnimationFrame(tick);
     }
   };
@@ -156,14 +136,11 @@ function AdminDashboard() {
   };
   
   const startScanner = async () => {
-    // Reset pesan sebelum memulai
     setMessage({ type: '', text: '' });
-    // FIX: Set `isScanning` ke true hanya setelah kamera berhasil diakses
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        // Tunggu video untuk mulai diputar sebelum memulai pemindaian
         videoRef.current.onloadedmetadata = () => {
           videoRef.current.play();
           setIsScanning(true);
@@ -178,21 +155,17 @@ function AdminDashboard() {
   };
   
   const stopScanner = () => {
-    // Hentikan loop animasi
     if (requestRef.current) {
       cancelAnimationFrame(requestRef.current);
       requestRef.current = null;
     }
-    // Hentikan stream kamera
     if (videoRef.current && videoRef.current.srcObject) {
       videoRef.current.srcObject.getTracks().forEach(track => track.stop());
       videoRef.current.srcObject = null;
     }
-    // Update state
     setIsScanning(false);
   };
   
-  // Cleanup effect untuk memastikan kamera mati saat komponen dibongkar (unmount)
   useEffect(() => {
     return () => {
       stopScanner();
@@ -203,7 +176,6 @@ function AdminDashboard() {
     <div className="dashboard-container">
       <h2>Admin Dashboard</h2>
       
-      {/* Area untuk menampilkan pesan feedback */}
       {message.text && (
         <p style={{ 
           padding: '10px', 
@@ -216,7 +188,6 @@ function AdminDashboard() {
         </p>
       )}
 
-      {/* Bagian Scanner QR */}
       <div className="form-container" style={{ padding: '1.5rem', border: '1px solid #eee', borderRadius: '8px', marginBottom: '2rem' }}>
         <h3>QR Code Check-in</h3>
         {!isScanning ? (
@@ -224,14 +195,12 @@ function AdminDashboard() {
         ) : (
           <button className="btn" onClick={stopScanner}>Stop Scanner</button>
         )}
-        {/* Tampilkan video hanya saat scanning aktif */}
         <div style={{ marginTop: '20px', display: isScanning ? 'block' : 'none' }}>
           <video ref={videoRef} style={{ width: '100%', maxWidth: '400px', border: '1px solid #ddd' }} playsInline />
           <canvas ref={canvasRef} style={{ display: 'none' }} />
         </div>
       </div>
 
-      {/* Bagian Manajemen Acara */}
       <div className="event-management-section">
         <h3>Event Management</h3>
         {!isFormOpen && (
