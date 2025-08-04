@@ -135,23 +135,47 @@ function AdminDashboard() {
     }
   };
   
+  // Lokasi: file AdminDashboard.jsx
+
   const startScanner = async () => {
     setMessage({ type: '', text: '' });
+    let stream;
+    
+    // 1. Prioritaskan kamera belakang (environment)
+    const rearCameraConstraints = {
+      video: { facingMode: 'environment' }
+    };
+
     try {
-      // BARU
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current.play();
-          setIsScanning(true);
-          requestRef.current = requestAnimationFrame(tick);
-        };
-      }
+      // Coba dapatkan stream dari kamera belakang terlebih dahulu
+      stream = await navigator.mediaDevices.getUserMedia(rearCameraConstraints);
+      console.log('Successfully accessed rear camera.');
+
     } catch (err) {
-      console.error("Camera access error:", err);
-      setMessage({ type: 'error', text: 'Camera access denied or not available.' });
-      setIsScanning(false);
+      // Jika gagal (misalnya di laptop), beri peringatan dan coba kamera depan/default
+      console.warn('Rear camera not available or access denied. Falling back to default camera.', err);
+      
+      try {
+        // Minta akses video apa pun yang tersedia (akan menjadi webcam di laptop)
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        console.log('Successfully accessed default/front camera.');
+      } catch (fallbackErr) {
+        // Jika semua usaha gagal (tidak ada kamera atau izin ditolak)
+        console.error("No camera could be accessed.", fallbackErr);
+        setMessage({ type: 'error', text: 'Gagal mengakses kamera. Pastikan Anda memberikan izin.' });
+        setIsScanning(false);
+        return; // Hentikan fungsi jika tidak ada stream
+      }
+    }
+
+    // Jika stream berhasil didapatkan (baik dari kamera belakang atau depan)
+    if (stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.onloadedmetadata = () => {
+        videoRef.current.play();
+        setIsScanning(true);
+        requestRef.current = requestAnimationFrame(tick);
+      };
     }
   };
   
