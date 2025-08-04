@@ -31,7 +31,6 @@ function AdminDashboard() {
     }
   };
 
-  // Jalankan fetchEvents saat komponen pertama kali dimuat
   useEffect(() => {
     fetchEvents();
   }, []);
@@ -113,75 +112,91 @@ function AdminDashboard() {
     }
   };
 
-  // --- LOGIKA SCANNER QR ---
-  const startScanner = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-        setIsScanning(true);
-        setMessage({ type: '', text: '' });
-        requestRef.current = requestAnimationFrame(tick);
-      }
-    } catch (err) {
-      setMessage({ type: 'error', text: 'Camera access denied.' });
-    }
-  };
+  // --- LOGIKA SCANNER QR (VERSI PERBAIKAN) ---
 
-  const stopScanner = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
-    }
-    if (requestRef.current) cancelAnimationFrame(requestRef.current);
-    setIsScanning(false);
-  };
-
+  // Fungsi yang berjalan di setiap frame video untuk mencari QR code
   const tick = () => {
-    if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+    // FIX: Tambahkan pengecekan `isScanning` untuk memastikan loop berhenti jika user menekan "Stop"
+    if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA && isScanning) {
       const canvas = canvasRef.current.getContext('2d');
       canvasRef.current.height = videoRef.current.videoHeight;
       canvasRef.current.width = videoRef.current.videoWidth;
       canvas.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
       const imageData = canvas.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
       const code = jsQR(imageData.data, imageData.width, imageData.height);
-      if (code) handleScanResult(code.data);
-      else if(isScanning) requestRef.current = requestAnimationFrame(tick);
+      
+      if (code) {
+        // Jika kode ditemukan, hentikan pemindaian dan proses hasilnya
+        stopScanner();
+        handleScanResult(code.data);
+      } else {
+        // Jika tidak ada kode, lanjutkan ke frame berikutnya
+        requestRef.current = requestAnimationFrame(tick);
+      }
     } else {
-      if(isScanning) requestRef.current = requestAnimationFrame(tick);
+      // Jika video belum siap, tetap lanjutkan loop
+      requestRef.current = requestAnimationFrame(tick);
     }
   };
 
-  // Ganti fungsi handleScanResult yang lama dengan yang ini
-const handleScanResult = async (qrCodeData) => {
-  stopScanner();
-  console.log('1. QR Code terdeteksi:', qrCodeData); // DEBUG
-
-  try {
-    console.log('2. Mengirim data ke API /api/checkin...'); // DEBUG
-    const response = await fetch('/api/checkin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ qrCodeData }),
-    });
-
-    console.log('3. Mendapat respons dari API. Status OK:', response.ok); // DEBUG
-
-    const data = await response.json();
-    console.log('4. Data respons dari API:', data); // DEBUG
-
-    if (!response.ok) {
-      throw new Error(data.message);
+  const handleScanResult = async (qrCodeData) => {
+    try {
+      setMessage({ type: 'info', text: `QR Code detected: ${qrCodeData}. Verifying...` });
+      const response = await fetch('/api/checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qrCodeData }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+      setMessage({ type: 'success', text: data.message });
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
     }
-    setMessage({ type: 'success', text: data.message });
-  } catch (err) {
-    console.error('5. Terjadi error:', err); // DEBUG
-    setMessage({ type: 'error', text: err.message });
-  }
-};
-
+  };
+  
+  const startScanner = async () => {
+    // Reset pesan sebelum memulai
+    setMessage({ type: '', text: '' });
+    // FIX: Set `isScanning` ke true hanya setelah kamera berhasil diakses
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        // Tunggu video untuk mulai diputar sebelum memulai pemindaian
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current.play();
+          setIsScanning(true);
+          requestRef.current = requestAnimationFrame(tick);
+        };
+      }
+    } catch (err) {
+      console.error("Camera access error:", err);
+      setMessage({ type: 'error', text: 'Camera access denied or not available.' });
+      setIsScanning(false);
+    }
+  };
+  
+  const stopScanner = () => {
+    // Hentikan loop animasi
+    if (requestRef.current) {
+      cancelAnimationFrame(requestRef.current);
+      requestRef.current = null;
+    }
+    // Hentikan stream kamera
+    if (videoRef.current && videoRef.current.srcObject) {
+      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    // Update state
+    setIsScanning(false);
+  };
+  
+  // Cleanup effect untuk memastikan kamera mati saat komponen dibongkar (unmount)
   useEffect(() => {
-    return () => stopScanner(); // Cleanup camera saat komponen di-unmount
+    return () => {
+      stopScanner();
+    };
   }, []);
 
   return (
@@ -209,12 +224,11 @@ const handleScanResult = async (qrCodeData) => {
         ) : (
           <button className="btn" onClick={stopScanner}>Stop Scanner</button>
         )}
-        {isScanning && (
-          <div style={{ marginTop: '20px' }}>
-            <video ref={videoRef} style={{ width: '100%', maxWidth: '400px', border: '1px solid #ddd' }} />
-            <canvas ref={canvasRef} style={{ display: 'none' }} />
-          </div>
-        )}
+        {/* Tampilkan video hanya saat scanning aktif */}
+        <div style={{ marginTop: '20px', display: isScanning ? 'block' : 'none' }}>
+          <video ref={videoRef} style={{ width: '100%', maxWidth: '400px', border: '1px solid #ddd' }} playsInline />
+          <canvas ref={canvasRef} style={{ display: 'none' }} />
+        </div>
       </div>
 
       {/* Bagian Manajemen Acara */}
