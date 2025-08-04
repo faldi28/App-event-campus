@@ -138,7 +138,8 @@ function AdminDashboard() {
   const startScanner = async () => {
     setMessage({ type: '', text: '' });
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      // BARU
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.onloadedmetadata = () => {
