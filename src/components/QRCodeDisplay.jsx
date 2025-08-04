@@ -7,7 +7,6 @@ function QRCodeDisplay({ registrationId }) {
       <h2>Registration Successful!</h2>
       <p>Show this QR code at the event for check-in.</p>
       {/* The QR code is generated based on a unique registration ID */}
-      // SESUDAH
       <QRCodeSVG value={`reg-${registrationId}`} size={256} />
       <p><strong>ID:</strong> {registrationId}</p>
     </div>
