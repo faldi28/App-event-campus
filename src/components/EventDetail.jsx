@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { useParams } from 'react-router-dom'; // Import useParams
+import { useParams } from 'react-router-dom';
 import QRCodeDisplay from './QRCodeDisplay';
 
 function EventDetail() {
-  const { id } = useParams(); // Dapatkan 'id' acara dari URL, contoh: /event/1
+  const { id } = useParams();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
@@ -12,7 +12,7 @@ function EventDetail() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(''); // Reset pesan error
+    setError('');
 
     try {
       const response = await fetch('/api/register', {
@@ -23,35 +23,33 @@ function EventDetail() {
         body: JSON.stringify({
           name: name,
           email: email,
-          eventId: parseInt(id) // Kirim ID acara ke backend
+          eventId: parseInt(id)
         }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        // Jika ada error dari backend (misal: sudah terdaftar), tampilkan pesannya
         throw new Error(data.message || 'Something went wrong');
       }
 
-      // Jika berhasil, simpan registrationId dan tampilkan QR code
       setRegistrationId(data.registrationId);
       setIsRegistered(true);
 
     } catch (err) {
-      setError(err.message); // Tampilkan pesan error di form
+      setError(err.message);
     }
   };
 
   if (isRegistered) {
-    // Kirim ID pendaftaran ke komponen QR Code
-    return <QRCodeDisplay registrationId={`reg-${registrationId}`} />;
+    // Anda sudah menambahkan prefix 'reg-' di sini, yang mana sudah benar.
+    // Pastikan di dalam QRCodeDisplay tidak ditambahkan prefix yang sama lagi.
+    return <QRCodeDisplay registrationId={registrationId} />;
   }
 
   return (
     <div className="form-container">
-      {/* Judul event bisa dibuat dinamis dengan fetch data event berdasarkan ID */}
-      <h2>Register for Event</h2> 
+      <h2>Register for Event</h2>
       <form onSubmit={handleSubmit}>
         {error && <p style={{ color: 'red' }}>{error}</p>}
         <div>
@@ -61,6 +59,8 @@ function EventDetail() {
             id="name"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            // DITAMBAHKAN DI SINI
+            autoComplete="name"
             required
           />
         </div>
@@ -71,6 +71,8 @@ function EventDetail() {
             id="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            // DITAMBAHKAN DI SINI
+            autoComplete="email"
             required
           />
         </div>
