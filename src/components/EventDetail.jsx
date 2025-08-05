@@ -42,8 +42,7 @@ function EventDetail() {
   };
 
   if (isRegistered) {
-    // Anda sudah menambahkan prefix 'reg-' di sini, yang mana sudah benar.
-    // Pastikan di dalam QRCodeDisplay tidak ditambahkan prefix yang sama lagi.
+
     return <QRCodeDisplay registrationId={registrationId} />;
   }
 
